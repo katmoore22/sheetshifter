@@ -207,8 +207,7 @@
 
       let solution;
       if (isDelayedArrival) {
-        const arrivalVal = fmtDate(row['Actual Arrival (Last Leg)']);
-        solution = arrivalVal ? `Arrived ${arrivalVal}` : 'Delayed';
+        solution = '';
       } else if (status === 'In transit') {
         const etaRaw = row['Estimated Arrival (Last Leg)'];
         if (etaRaw) {
