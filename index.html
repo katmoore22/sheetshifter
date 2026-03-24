@@ -219,7 +219,14 @@
         const estDepRaw = row['Estimated Departure (First Leg)'];
         solution = estDepRaw ? `In transit - Est. Dep. ${fmtDate(estDepRaw)}` : 'In transit';
       } else {
-        const dateVal = fmtDate(row['Estimated Departure (First Leg)']);
+        const estDepRaw = row['Estimated Departure (First Leg)'];
+        if (estDepRaw) {
+          const estDepDate = estDepRaw instanceof Date ? estDepRaw : new Date(estDepRaw);
+          estDepDate.setHours(0, 0, 0, 0);
+          const daysSince = Math.round((today - estDepDate) / (1000 * 60 * 60 * 24));
+          if (daysSince > 3) return;
+        }
+        const dateVal = fmtDate(estDepRaw || null);
         solution = dateVal ? `${status} for ${dateVal}` : status;
       }
 
