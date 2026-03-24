@@ -18,4 +18,255 @@
   body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 48px 24px; }
   header { width: 100%; max-width: 780px; margin-bottom: 48px; }
   .label { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.2em; color: var(--green); text-transform: uppercase; margin-bottom: 10px; }
-  h1 { font-family: var(--sans);
+  h1 { font-family: var(--sans); font-size: 36px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: var(--text); }
+  h1 span { color: var(--green); }
+  .subtitle { margin-top: 10px; font-size: 12px; color: var(--muted); letter-spacing: 0.05em; }
+  .card { width: 100%; max-width: 780px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 32px; margin-bottom: 16px; }
+  .drop-zone { border: 1px dashed var(--border); border-radius: 4px; padding: 48px 32px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--green); background: var(--green-dim); }
+  .drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 28px; margin-bottom: 12px; }
+  .drop-title { font-family: var(--sans); font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .drop-sub { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; }
+  .file-loaded { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--green-dim); border: 1px solid var(--green-mid); border-radius: 4px; margin-top: 16px; }
+  .file-loaded .fname { font-size: 12px; color: var(--green); flex: 1; }
+  .file-loaded .fcount { font-size: 11px; color: var(--muted); }
+  .btn { width: 100%; max-width: 780px; padding: 16px; background: var(--green); color: #000; font-family: var(--sans); font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; border: none; border-radius: 4px; cursor: pointer; transition: all 0.15s; margin-bottom: 16px; }
+  .btn:hover:not(:disabled) { background: #00c85d; transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+  .result-card { width: 100%; max-width: 780px; background: var(--surface); border: 1px solid var(--green-mid); border-radius: 4px; padding: 24px 32px; display: none; align-items: center; justify-content: space-between; gap: 16px; }
+  .result-info { display: flex; flex-direction: column; gap: 4px; }
+  .result-label { font-size: 10px; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; }
+  .result-count { font-family: var(--sans); font-size: 20px; font-weight: 700; color: var(--green); }
+  .download-btn { padding: 12px 24px; background: var(--green); color: #000; font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: none; border-radius: 4px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .download-btn:hover { background: #00c85d; transform: translateY(-1px); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="label">Spreadsheet Converter</div>
+  <h1>Sheet<span>Shifter</span></h1>
+  <p class="subtitle">Transform & reformat your spreadsheet data instantly</p>
+</header>
+<div class="card">
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+    <div class="drop-icon">📦</div>
+    <div class="drop-title">Drop your spreadsheet here</div>
+    <div class="drop-sub">XLSX · Excel format</div>
+  </div>
+  <div class="file-loaded hidden" id="fileLoaded">
+    <span>✓</span>
+    <span class="fname" id="fileName"></span>
+    <span class="fcount" id="rowCount"></span>
+  </div>
+</div>
+<button class="btn" id="processBtn" disabled>Process Spreadsheet</button>
+<div class="result-card" id="resultCard">
+  <div class="result-info">
+    <span class="result-label">Ready to download</span>
+    <span class="result-count" id="resultCount"></span>
+  </div>
+  <button class="download-btn" id="downloadBtn">↓ Download MEA_Updates.xlsx</button>
+</div>
+<script>
+  // ── MENA DETECTION ────────────────────────────────────────────────────────
+  const MENA_COUNTRIES = new Set([
+    'AE','SA','QA','KW','BH','OM','JO','LB','IL','PS','IQ','IR','SY','YE',
+    'EG','MA','DZ','TN','LY','SD'
+  ]);
+  const MENA_AIRPORTS = new Set([
+    'DXB','AUH','SHJ','DWC','RKT','AAN','FJR',
+    'RUH','JED','DMM','MED','AHB','TIF','ELQ','GIZ','HOF','ULH','TUU','ABT',
+    'DOH','KWI','BAH','MCT','SLL','SUR','DQM',
+    'AMM','AQJ','BEY','TLV','SDV','ETH','VDA',
+    'BGW','BSR','EBL','NJF','OSM',
+    'THR','IKA','MHD','IFN','TBZ','AWZ','KIH','SYZ',
+    'DAM','ALP','LTK','SAH','ADE',
+    'CAI','HRG','SSH','LXR','ASW','MUH',
+    'CMN','RAK','AGA','FEZ','TNG',
+    'ALG','ORN','CZL','TUN','SFA','DJE','TIP','BEN','KRT',
+  ]);
+
+  function isMENA(token) {
+    const t = token.trim().toUpperCase();
+    if (t.length === 2) return MENA_COUNTRIES.has(t);
+    if (t.length === 3) return MENA_AIRPORTS.has(t);
+    if (t.length === 5) return MENA_COUNTRIES.has(t.slice(0,2)) || MENA_AIRPORTS.has(t.slice(2));
+    return false;
+  }
+
+  function lanePairIsMENA(lane) {
+    if (!lane) return false;
+    return lane.split('/').some(side =>
+      side.trim().split(/\s+/).some(tok => isMENA(tok))
+    );
+  }
+
+  // ── STATUS & STYLES ───────────────────────────────────────────────────────
+  const STATUS_STYLE = {
+    'Booked':     { bg: 'C6EFCE', font: '276221' },
+    'In transit': { bg: 'BDD7EE', font: '1F4E79' },
+    'Pending':    { bg: 'FFC7CE', font: '9C0006' },
+    'Arrived':    { bg: 'FFFFCC', font: '7F6000' },
+    'Delayed':    { bg: 'FFAA44', font: '7C3300' },
+  };
+
+  function cellStyle(bgRgb, fontRgb) {
+    return {
+      fill: { patternType: 'solid', fgColor: { rgb: bgRgb } },
+      font: { name: 'Aptos Narrow', sz: 11, color: { rgb: fontRgb } },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    };
+  }
+
+  const HEADER_STYLE = {
+    fill: { patternType: 'solid', fgColor: { rgb: '595959' } },
+    font: { name: 'Aptos Narrow', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+    alignment: { horizontal: 'left', vertical: 'center' }
+  };
+
+  // ── APP ───────────────────────────────────────────────────────────────────
+  let workbookData = null;
+  let outputRows   = [];
+
+  const fileInput   = document.getElementById('fileInput');
+  const dropZone    = document.getElementById('dropZone');
+  const fileLoaded  = document.getElementById('fileLoaded');
+  const fileName    = document.getElementById('fileName');
+  const rowCount    = document.getElementById('rowCount');
+  const processBtn  = document.getElementById('processBtn');
+  const resultCard  = document.getElementById('resultCard');
+  const resultCount = document.getElementById('resultCount');
+  const downloadBtn = document.getElementById('downloadBtn');
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+  function handleFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      workbookData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null });
+      fileName.textContent = file.name;
+      rowCount.textContent = `${workbookData.length} row${workbookData.length !== 1 ? 's' : ''}`;
+      fileLoaded.classList.remove('hidden');
+      processBtn.disabled = false;
+      resultCard.style.display = 'none';
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function hasValue(v) {
+    return v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && isNaN(v));
+  }
+
+  function getStatus(row) {
+    if (hasValue(row['Actual Arrival (Last Leg)']))    return 'Arrived';
+    if (hasValue(row['Actual Departure (First Leg)'])) return 'In transit';
+    if (hasValue(row['MasterBill']))                   return 'Booked';
+    return 'Pending';
+  }
+
+  function fmtDate(val) {
+    if (!val) return '';
+    const d = val instanceof Date ? val : new Date(val);
+    if (isNaN(d)) return String(val);
+    return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
+  }
+
+  processBtn.addEventListener('click', () => {
+    if (!workbookData) return;
+    outputRows = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    workbookData.forEach(row => {
+      const originCode = (row['Origin Code (First Leg)'] || '').toString().trim();
+      const destCode   = (row['Destination Code (First Leg)'] || '').toString().trim();
+      if (!isMENA(originCode) && !isMENA(destCode)) return;
+
+      const isUSDest = destCode.toUpperCase().startsWith('US');
+      const hawb     = row['HouseBill'] || '';
+      const mawb     = row['MasterBill'] || '';
+      const lanePair = [originCode, destCode].filter(Boolean).join(' / ');
+      const buRaw    = isUSDest ? (row['Consignee Name'] || '') : (row['Shipper Name'] || '');
+      const buLower  = buRaw.toLowerCase();
+      const bu       = (buLower.includes('pratt') || buLower.includes('raython')) ? buRaw : 'Collins Aerospace';
+      const status   = getStatus(row);
+
+      // Flag arrived rows that arrived more than 3 days ago as Delayed
+      let isDelayedArrival = false;
+      if (status === 'Arrived') {
+        const arrivalRaw = row['Actual Arrival (Last Leg)'];
+        if (arrivalRaw) {
+          const arrivalDate = arrivalRaw instanceof Date ? arrivalRaw : new Date(arrivalRaw);
+          arrivalDate.setHours(0, 0, 0, 0);
+          const daysSince = Math.round((today - arrivalDate) / (1000 * 60 * 60 * 24));
+          if (daysSince > 3) isDelayedArrival = true;
+        }
+      }
+
+      let solution;
+      if (isDelayedArrival) {
+        const arrivalVal = fmtDate(row['Actual Arrival (Last Leg)']);
+        solution = arrivalVal ? `Arrived ${arrivalVal}` : 'Delayed';
+      } else if (status === 'In transit') {
+        // Keep existing filter: drop in-transit rows arriving 3+ days out
+        const etaRaw = row['Estimated Arrival (Last Leg)'];
+        if (etaRaw) {
+          const etaDate = etaRaw instanceof Date ? etaRaw : new Date(etaRaw);
+          etaDate.setHours(0, 0, 0, 0);
+          const diffDays = Math.round((etaDate - today) / (1000 * 60 * 60 * 24));
+          if (diffDays >= 3) return;
+        }
+        // Solution uses Estimated Departure date (column AP)
+        const estDepRaw = row['Estimated Departure (First Leg)'];
+        solution = estDepRaw ? `In transit - Est. Dep. ${fmtDate(estDepRaw)}` : 'In transit';
+      } else {
+        const dateVal = fmtDate(row['Estimated Departure (First Leg)']);
+        solution = dateVal ? `${status} for ${dateVal}` : status;
+      }
+
+      outputRows.push({ hawb, lanePair, bu, status: isDelayedArrival ? 'Delayed' : status, solution, mawb });
+    });
+    resultCount.textContent = `${outputRows.length} row${outputRows.length !== 1 ? 's' : ''} processed`;
+    resultCard.style.display = 'flex';
+  });
+
+  // myDHLi auth entry point — clicking a HAWB opens DHL's SSO login then lands in the app
+  const DHLI_URL = 'https://keycloak.mydhli.com/auth/realms/DCI/protocol/openid-connect/auth?redirect_uri=https%3A%2F%2Fapp.mydhli.com%2Flogin&scope=openid+web-origins&response_type=code&client_id=myDHLi&ui_locales=en';
+
+  downloadBtn.addEventListener('click', () => {
+    const wb      = XLSX.utils.book_new();
+    const headers = ['HAWB', 'Lane Pair', 'RTX Business Unit', 'Status', 'Solution', 'MAWB'];
+
+    // Build worksheet data with cell objects so we can attach styles
+    const wsData = [
+      headers.map(h => ({ v: h, s: HEADER_STYLE })),
+      ...outputRows.map(r => {
+        const s = STATUS_STYLE[r.status] || { bg: 'FFFFFF', font: '000000' };
+        const st = cellStyle(s.bg, s.font);
+        return [
+          { v: r.hawb, l: { Target: DHLI_URL }, s: st },
+          { v: r.lanePair, s: st },
+          { v: r.bu,       s: st },
+          { v: r.status,   s: st },
+          { v: r.solution, s: st },
+          { v: r.mawb,     s: st },
+        ];
+      })
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 30 }, { wch: 16 }];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Updates');
+    XLSX.writeFile(wb, 'MEA_Updates.xlsx');
+  });
+</script>
+</body>
+</html>
