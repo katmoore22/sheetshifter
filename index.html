@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SheetShifter — Spreadsheet Format Converter</title>
-<!-- xlsx-js-style: SheetJS fork with full cell styling support -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
@@ -71,7 +70,6 @@
   <button class="download-btn" id="downloadBtn">↓ Download MEA_Updates.xlsx</button>
 </div>
 <script>
-  // ── MENA DETECTION ────────────────────────────────────────────────────────
   const MENA_COUNTRIES = new Set([
     'AE','SA','QA','KW','BH','OM','JO','LB','IL','PS','IQ','IR','SY','YE',
     'EG','MA','DZ','TN','LY','SD'
@@ -104,10 +102,9 @@
     );
   }
 
-  // ── STATUS & STYLES ───────────────────────────────────────────────────────
   const STATUS_STYLE = {
     'Booked':     { bg: 'C6EFCE', font: '276221' },
-    'In transit': { bg: 'BDD7EE', font: '1F4E79' },
+    'In transit': { bg: '1F3864', font: 'FFFFFF' },
     'Pending':    { bg: 'FFC7CE', font: '9C0006' },
     'Arrived':    { bg: 'FFFFCC', font: '7F6000' },
     'Delayed':    { bg: 'FFAA44', font: '7C3300' },
@@ -127,7 +124,6 @@
     alignment: { horizontal: 'left', vertical: 'center' }
   };
 
-  // ── APP ───────────────────────────────────────────────────────────────────
   let workbookData = null;
   let outputRows   = [];
 
@@ -198,7 +194,6 @@
       const bu       = (buLower.includes('pratt') || buLower.includes('raython')) ? buRaw : 'Collins Aerospace';
       const status   = getStatus(row);
 
-      // Flag arrived rows that arrived more than 3 days ago as Delayed
       let isDelayedArrival = false;
       if (status === 'Arrived') {
         const arrivalRaw = row['Actual Arrival (Last Leg)'];
@@ -215,7 +210,6 @@
         const arrivalVal = fmtDate(row['Actual Arrival (Last Leg)']);
         solution = arrivalVal ? `Arrived ${arrivalVal}` : 'Delayed';
       } else if (status === 'In transit') {
-        // Keep existing filter: drop in-transit rows arriving 3+ days out
         const etaRaw = row['Estimated Arrival (Last Leg)'];
         if (etaRaw) {
           const etaDate = etaRaw instanceof Date ? etaRaw : new Date(etaRaw);
@@ -223,7 +217,6 @@
           const diffDays = Math.round((etaDate - today) / (1000 * 60 * 60 * 24));
           if (diffDays >= 3) return;
         }
-        // Solution uses Estimated Departure date (column AP)
         const estDepRaw = row['Estimated Departure (First Leg)'];
         solution = estDepRaw ? `In transit - Est. Dep. ${fmtDate(estDepRaw)}` : 'In transit';
       } else {
@@ -237,14 +230,12 @@
     resultCard.style.display = 'flex';
   });
 
-  // myDHLi auth entry point — clicking a HAWB opens DHL's SSO login then lands in the app
   const DHLI_URL = 'https://keycloak.mydhli.com/auth/realms/DCI/protocol/openid-connect/auth?redirect_uri=https%3A%2F%2Fapp.mydhli.com%2Flogin&scope=openid+web-origins&response_type=code&client_id=myDHLi&ui_locales=en';
 
   downloadBtn.addEventListener('click', () => {
     const wb      = XLSX.utils.book_new();
     const headers = ['HAWB', 'Lane Pair', 'RTX Business Unit', 'Status', 'Solution', 'MAWB'];
 
-    // Build worksheet data with cell objects so we can attach styles
     const wsData = [
       headers.map(h => ({ v: h, s: HEADER_STYLE })),
       ...outputRows.map(r => {
