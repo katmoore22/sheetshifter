@@ -74,7 +74,7 @@
 </div>
 <script>
   // ── NTP-BACKED TIME ───────────────────────────────────────────────────────
-  let TODAY = null; // set after NTP sync
+  let TODAY = null;
 
   async function syncTime() {
     try {
@@ -82,7 +82,7 @@
       const data = await res.json();
       TODAY = new Date(data.utc_datetime);
     } catch (e) {
-      TODAY = new Date(); // fallback to system clock
+      TODAY = new Date();
     }
     TODAY.setHours(0, 0, 0, 0);
     const display = TODAY.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -117,20 +117,12 @@
     return false;
   }
 
-  function lanePairIsMENA(lane) {
-    if (!lane) return false;
-    return lane.split('/').some(side =>
-      side.trim().split(/\s+/).some(tok => isMENA(tok))
-    );
-  }
-
   // ── STATUS & STYLES ───────────────────────────────────────────────────────
   const STATUS_STYLE = {
     'Booked':     { bg: 'C6EFCE', font: '276221' },
     'In transit': { bg: '1F3864', font: 'FFFFFF' },
     'Pending':    { bg: 'FFC7CE', font: '9C0006' },
     'Arrived':    { bg: 'FFFFCC', font: '7F6000' },
-    'Delayed':    { bg: 'FFAA44', font: '7C3300' },
   };
 
   function cellStyle(bgRgb, fontRgb) {
@@ -208,7 +200,6 @@
   processBtn.addEventListener('click', async () => {
     if (!workbookData) return;
 
-    // Re-sync time on each process click for accuracy
     await syncTime();
 
     outputRows = [];
@@ -237,11 +228,12 @@
           const arrivalDate = toMidnight(arrivalRaw);
           const daysSince   = Math.round((today - arrivalDate) / (1000 * 60 * 60 * 24));
           if (daysSince > 3) {
-            // Arrived more than 3 days ago → Delayed, blank solution, keep in report
-            finalStatus = 'Delayed';
-            solution    = '';
+            // Arrived more than 3 days ago → downgrade to Pending, show est departure date
+            finalStatus = 'Pending';
+            const estDepRaw = row['Estimated Departure (First Leg)'];
+            solution = fmtDate(estDepRaw || null);
           } else {
-            // Arrived within 3 days → show in report as Arrived
+            // Arrived within 3 days → keep as Arrived
             solution = `Arrived ${fmtDate(arrivalRaw)}`;
           }
         } else {
@@ -256,7 +248,7 @@
           if (diffDays >= 3) return; // arriving 3+ days out — skip
         }
         const estDepRaw = row['Estimated Departure (First Leg)'];
-        solution = estDepRaw ? `In transit - Est. Dep. ${fmtDate(estDepRaw)}` : 'In transit';
+        solution = estDepRaw ? fmtDate(estDepRaw) : '';
 
       } else {
         // Booked / Pending
@@ -266,8 +258,7 @@
           const daysSince  = Math.round((today - estDepDate) / (1000 * 60 * 60 * 24));
           if (daysSince > 3) return; // est departure more than 3 days ago — skip
         }
-        const dateVal = fmtDate(estDepRaw || null);
-        solution = dateVal ? `${status} for ${dateVal}` : status;
+        solution = fmtDate(estDepRaw || null);
       }
 
       outputRows.push({ hawb, lanePair, bu, status: finalStatus, solution, mawb });
