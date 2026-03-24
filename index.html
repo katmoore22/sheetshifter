@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SheetShifter — Spreadsheet Format Converter</title>
+<!-- xlsx-js-style: SheetJS fork with full cell styling support -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
+  :root {
+    --bg: #0f0f0f; --surface: #181818; --border: #2a2a2a;
+    --green: #00B050; --green-dim: #00B05022; --green-mid: #00B05044;
+    --text: #e8e8e8; --muted: #666;
+    --mono: 'DM Mono', monospace; --sans: 'Syne', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 48px 24px; }
+  header { width: 100%; max-width: 780px; margin-bottom: 48px; }
+  .label { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.2em; color: var(--green); text-transform: uppercase; margin-bottom: 10px; }
+  h1 { font-family: var(--sans);
