@@ -40,6 +40,8 @@
   .download-btn { padding: 12px 24px; background: var(--green); color: #000; font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; border: none; border-radius: 4px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
   .download-btn:hover { background: #00c85d; transform: translateY(-1px); }
   .hidden { display: none; }
+  .clock { font-size: 11px; color: var(--muted); margin-top: 6px; letter-spacing: 0.05em; }
+  .clock span { color: var(--green); }
 </style>
 </head>
 <body>
@@ -47,6 +49,7 @@
   <div class="label">Spreadsheet Converter</div>
   <h1>Sheet<span>Shifter</span></h1>
   <p class="subtitle">Transform & reformat your spreadsheet data instantly</p>
+  <div class="clock" id="clockDisplay">Syncing time...</div>
 </header>
 <div class="card">
   <div class="drop-zone" id="dropZone">
@@ -70,6 +73,25 @@
   <button class="download-btn" id="downloadBtn">↓ Download MEA_Updates.xlsx</button>
 </div>
 <script>
+  // ── NTP-BACKED TIME ───────────────────────────────────────────────────────
+  let TODAY = null; // set after NTP sync
+
+  async function syncTime() {
+    try {
+      const res = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC');
+      const data = await res.json();
+      TODAY = new Date(data.utc_datetime);
+    } catch (e) {
+      TODAY = new Date(); // fallback to system clock
+    }
+    TODAY.setHours(0, 0, 0, 0);
+    const display = TODAY.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    document.getElementById('clockDisplay').innerHTML = `Current date (NTP): <span>${display}</span>`;
+  }
+
+  syncTime();
+
+  // ── MENA DETECTION ────────────────────────────────────────────────────────
   const MENA_COUNTRIES = new Set([
     'AE','SA','QA','KW','BH','OM','JO','LB','IL','PS','IQ','IR','SY','YE',
     'EG','MA','DZ','TN','LY','SD'
@@ -102,6 +124,7 @@
     );
   }
 
+  // ── STATUS & STYLES ───────────────────────────────────────────────────────
   const STATUS_STYLE = {
     'Booked':     { bg: 'C6EFCE', font: '276221' },
     'In transit': { bg: '1F3864', font: 'FFFFFF' },
@@ -124,6 +147,7 @@
     alignment: { horizontal: 'left', vertical: 'center' }
   };
 
+  // ── APP ───────────────────────────────────────────────────────────────────
   let workbookData = null;
   let outputRows   = [];
 
@@ -175,11 +199,21 @@
     return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
   }
 
-  processBtn.addEventListener('click', () => {
+  function toMidnight(val) {
+    const d = val instanceof Date ? new Date(val) : new Date(val);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  processBtn.addEventListener('click', async () => {
     if (!workbookData) return;
+
+    // Re-sync time on each process click for accuracy
+    await syncTime();
+
     outputRows = [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = TODAY;
+
     workbookData.forEach(row => {
       const originCode = (row['Origin Code (First Leg)'] || '').toString().trim();
       const destCode   = (row['Destination Code (First Leg)'] || '').toString().trim();
@@ -194,44 +228,51 @@
       const bu       = (buLower.includes('pratt') || buLower.includes('raython')) ? buRaw : 'Collins Aerospace';
       const status   = getStatus(row);
 
-      let isDelayedArrival = false;
+      let finalStatus = status;
+      let solution    = '';
+
       if (status === 'Arrived') {
         const arrivalRaw = row['Actual Arrival (Last Leg)'];
         if (arrivalRaw) {
-          const arrivalDate = arrivalRaw instanceof Date ? arrivalRaw : new Date(arrivalRaw);
-          arrivalDate.setHours(0, 0, 0, 0);
-          const daysSince = Math.round((today - arrivalDate) / (1000 * 60 * 60 * 24));
-          if (daysSince > 3) isDelayedArrival = true;
+          const arrivalDate = toMidnight(arrivalRaw);
+          const daysSince   = Math.round((today - arrivalDate) / (1000 * 60 * 60 * 24));
+          if (daysSince > 3) {
+            // Arrived more than 3 days ago → Delayed, blank solution, keep in report
+            finalStatus = 'Delayed';
+            solution    = '';
+          } else {
+            // Arrived within 3 days → show in report as Arrived
+            solution = `Arrived ${fmtDate(arrivalRaw)}`;
+          }
+        } else {
+          solution = 'Arrived';
         }
-      }
 
-      let solution;
-      if (isDelayedArrival) {
-        solution = '';
       } else if (status === 'In transit') {
         const etaRaw = row['Estimated Arrival (Last Leg)'];
         if (etaRaw) {
-          const etaDate = etaRaw instanceof Date ? etaRaw : new Date(etaRaw);
-          etaDate.setHours(0, 0, 0, 0);
+          const etaDate  = toMidnight(etaRaw);
           const diffDays = Math.round((etaDate - today) / (1000 * 60 * 60 * 24));
-          if (diffDays >= 3) return;
+          if (diffDays >= 3) return; // arriving 3+ days out — skip
         }
         const estDepRaw = row['Estimated Departure (First Leg)'];
         solution = estDepRaw ? `In transit - Est. Dep. ${fmtDate(estDepRaw)}` : 'In transit';
+
       } else {
+        // Booked / Pending
         const estDepRaw = row['Estimated Departure (First Leg)'];
         if (estDepRaw) {
-          const estDepDate = estDepRaw instanceof Date ? estDepRaw : new Date(estDepRaw);
-          estDepDate.setHours(0, 0, 0, 0);
-          const daysSince = Math.round((today - estDepDate) / (1000 * 60 * 60 * 24));
-          if (daysSince > 3) return;
+          const estDepDate = toMidnight(estDepRaw);
+          const daysSince  = Math.round((today - estDepDate) / (1000 * 60 * 60 * 24));
+          if (daysSince > 3) return; // est departure more than 3 days ago — skip
         }
         const dateVal = fmtDate(estDepRaw || null);
         solution = dateVal ? `${status} for ${dateVal}` : status;
       }
 
-      outputRows.push({ hawb, lanePair, bu, status: isDelayedArrival ? 'Delayed' : status, solution, mawb });
+      outputRows.push({ hawb, lanePair, bu, status: finalStatus, solution, mawb });
     });
+
     resultCount.textContent = `${outputRows.length} row${outputRows.length !== 1 ? 's' : ''} processed`;
     resultCard.style.display = 'flex';
   });
